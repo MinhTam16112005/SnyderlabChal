@@ -1,0 +1,2 @@
+0 1 * * * cd /app && /usr/local/bin/python ingest.py >> /var/log/cron.log 2>&1
+
