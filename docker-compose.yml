@@ -1,6 +1,8 @@
 services:
-  # Chosen time-serie database: TimescaleDB on Postgres
+  # Chosen time-series database: TimescaleDB on Postgres
   timescaledb:
+    env_file:
+      - .env
     image: timescale/timescaledb:latest-pg15
     volumes:
       # Persist DB data across restarts
@@ -14,27 +16,81 @@ services:
       POSTGRES_DB: fitbit_data
     ports:
       - "5433:5432"
+    networks:
+      - snyder-net
 
   # This is ingestion service that runs our Python + cron job (main program)
   ingester:
     env_file:
-      # Pulls in .env file; these variables drive the Python script, you would need to set up .env for this ones
       - .env
     build: ./ingestion
     volumes:
+      # Mount the entire project root so it can access all code
+      - ./:/app
+      # Keep the specific last_run.txt mount for persistence
       - ./ingestion/last_run.txt:/app/last_run.txt
-      - ./.env:/app/.env  # for python-dotenv (optional, since env_file covers it)
     environment:
       DB_HOST: ${DB_HOST} #eg: timescaledb
       DB_PORT: ${DB_PORT} #eg: 5432
       DB_NAME: ${DB_NAME} #eg: fitbit_data
       DB_USER: ${DB_USER} #eg: fitbit_user
       DB_PASSWORD: ${DB_PASSWORD} #eg: fitbit_password
+      USER_ID: ${USER_ID} #eg: user_1
       SEED: ${SEED} #eg: 100
     depends_on:
       - timescaledb
+    networks:
+      - snyder-net
     # Cron is configured inside the Dockerfile (via /etc/cron.d/fitbit-cron)
 
+  # Backend API service
+  backend:
+    build:
+      context: ./backend
+    env_file:
+      - .env
+    volumes:
+      # Mount the entire project root so it can access ingestion/ folder
+      - ./:/app
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      DB_PORT: ${DB_PORT}
+    working_dir: /app/backend  # Set working directory to where app.py is located
+    command: python app.py     # Override the default command to run from correct location
+    ports:
+      - "5001:5000"
+    depends_on:
+      - timescaledb
+    networks:
+      - snyder-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # # Frontend dashboard service
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     API_URL: http://backend:5000
+  #   ports:
+  #     - "3000:80"
+  #   depends_on:
+  #     - backend
+  #   networks:
+  #     - snyder-net
+
 volumes:
-  # Named volume for TimescaleDB data
   tsdb-data:
+    name: timescaledb
+
+networks:
+  snyder-net:
+    driver: bridge
