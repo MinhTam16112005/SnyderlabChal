@@ -262,15 +262,43 @@ def get_data(
     if end_ts <= start_ts:
         raise HTTPException(status_code=400, detail="end_date must be after start_date")
 
-    # Query database
+    # Query database with smart routing
     offset = (page - 1) * per_page
-    query = (
-        "SELECT timestamp, user_id, metric_type, value FROM raw_data "
-        "WHERE user_id = %s AND metric_type = %s "
-        "AND timestamp BETWEEN %s AND %s "
-        "ORDER BY timestamp LIMIT %s OFFSET %s"
-    )
-    
+    date_range_days = (end_ts - start_ts).days
+    hours_difference = (end_ts - start_ts).total_seconds() / 3600
+
+    # Enhanced routing logic with more meaningful thresholds
+    if date_range_days >= 30:
+        # Monthly+ view: Use daily aggregates (significant memory savings)
+        query = (
+            "SELECT date_day::timestamp as timestamp, user_id, metric_type, avg_value as value "
+            "FROM data_1d "
+            "WHERE user_id = %s AND metric_type = %s "
+            "AND date_day BETWEEN %s::date AND %s::date "
+            "ORDER BY date_day LIMIT %s OFFSET %s"
+        )
+        print(f"📅 Using daily aggregates for {date_range_days}-day range (month+ view)")
+    elif date_range_days > 7:
+        # Week+ view: Use daily aggregates but with more detail
+        query = (
+            "SELECT date_day::timestamp as timestamp, user_id, metric_type, "
+            "avg_value as value, min_value, max_value "
+            "FROM data_1d "
+            "WHERE user_id = %s AND metric_type = %s "
+            "AND date_day BETWEEN %s::date AND %s::date "
+            "ORDER BY date_day LIMIT %s OFFSET %s"
+        )
+        print(f"🚀 Using detailed daily aggregates for {date_range_days}-day range (week+ view)")
+    else:
+        # Detailed view: Raw hourly data for maximum detail
+        query = (
+            "SELECT timestamp, user_id, metric_type, value FROM raw_data "
+            "WHERE user_id = %s AND metric_type = %s "
+            "AND timestamp BETWEEN %s AND %s "
+            "ORDER BY timestamp LIMIT %s OFFSET %s"
+        )
+        print(f"📊 Using raw hourly data for {date_range_days}-day range ({hours_difference:.1f} hours)")
+ 
     try:
         conn = db_config.get_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
