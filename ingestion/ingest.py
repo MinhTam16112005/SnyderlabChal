@@ -312,6 +312,48 @@ def save_data(records):
         traceback.print_exc()
         raise
 
+def create_daily_aggregates():
+    """Create daily aggregates from raw hourly data"""
+    try:
+        log("create_daily_aggregates() called")
+        conn = psycopg2.connect(**DB_PARAMS)
+        cur = conn.cursor()
+        
+        # Create daily aggregates from all raw data
+        sql = """
+        INSERT INTO data_1d (date_day, user_id, metric_type, avg_value, min_value, max_value, count_points)
+        SELECT 
+            DATE(timestamp) as date_day,
+            user_id,
+            metric_type,
+            AVG(value) as avg_value,
+            MIN(value) as min_value,
+            MAX(value) as max_value,
+            COUNT(*) as count_points
+        FROM raw_data 
+        GROUP BY DATE(timestamp), user_id, metric_type
+        ON CONFLICT (date_day, user_id, metric_type) DO UPDATE SET
+            avg_value = EXCLUDED.avg_value,
+            min_value = EXCLUDED.min_value,
+            max_value = EXCLUDED.max_value,
+            count_points = EXCLUDED.count_points
+        """
+        
+        cur.execute(sql)
+        conn.commit()
+        affected = cur.rowcount
+        
+        cur.close()
+        conn.close()
+        
+        log(f"Created/updated {affected} daily aggregate records")
+        return affected
+        
+    except Exception as e:
+        log(f"ERROR in create_daily_aggregates(): {e}")
+        traceback.print_exc()
+        raise
+
 # Generate synthetic data for API use.
 def generate_synthetic_data_for_api(start_time: datetime.datetime, end_time: datetime.datetime, user_id: str = None):
     try:
@@ -341,6 +383,13 @@ def ingest_for_range(start_dt: datetime.datetime, end_dt: datetime.datetime, use
     log(f"[RANGE_INGEST] Fetched {len(data)} data points")
     saved_count = save_data(data)
     log(f"[RANGE_INGEST] Saved {saved_count} new records")
+    
+    # Add auto-aggregation
+    if saved_count > 0:
+        log("[RANGE_INGEST] Generating daily aggregates")
+        agg_count = create_daily_aggregates()
+        log(f"[RANGE_INGEST] Updated {agg_count} daily aggregates")
+    
     update_last_run(end_dt)
     log(f"[RANGE_INGEST] Updated last_run to {end_dt.isoformat()}")
     return {"total_points": len(data), "saved_points": saved_count, "start_time": start_dt.isoformat(), "end_time": end_dt.isoformat()}
@@ -356,6 +405,13 @@ def main():
         log(f"[MAIN_INGEST] Fetched {len(data)} data points")
         saved_count = save_data(data)
         log(f"[MAIN_INGEST] Saved {saved_count} new records")
+        
+        # Add auto-aggregation here
+        if saved_count > 0:
+            log("[MAIN_INGEST] Generating daily aggregates")
+            agg_count = create_daily_aggregates()
+            log(f"[MAIN_INGEST] Updated {agg_count} daily aggregates")
+            
         update_last_run(now)
         log(f"[MAIN_INGEST] Updated last_run to {now.isoformat()}")
     except Exception as e:

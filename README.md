@@ -14,7 +14,13 @@
 
 - **Update 3 (July 9)**  
   Completed task 2: Access / Read Flow
-  Built a comprehensive FastAPI backend with React frontend for health data visualization. Features include random synthetic data generation, data retrieval with pagination, real-time visualization, and clean architecture following best practices.
+  I've built a comprehensive FastAPI backend with React frontend for health data visualization. Features include random synthetic data generation, data retrieval with pagination, real-time visualization, and clean architecture following best practices.
+  Please see the **demo video** (which i attached the link) in the [Google Doc](https://docs.google.com/document/d/1OY2PlsC_XDZ060Dw5oSTyHAeoWPiIbVfOWu471qASZ4/edit?usp=sharing). (Tab: Task 2 video demo dashboard)
+
+- **Update 4 (July 10)**  
+  Completed task 3 (main task): Optimizing Design for Multi-Year / Multi-User queries
+  I've implemented a comprehensive database optimization strategy with automatic time-based aggregations and smart query routing. The system now creates daily summaries of raw hourly data during ingestion, and automatically selects the appropriate data source based on query timespan. This enables efficient memory usage for large queries spanning months or years of data, reducing data transfer by up to 95%.
+  Please see the detailed aggregation technique explaination I applied into my program in the [Google Doc](https://docs.google.com/document/d/1OY2PlsC_XDZ060Dw5oSTyHAeoWPiIbVfOWu471qASZ4/edit?usp=sharing). (Tab: Task 3)
 
 # Task 1: Ingesiton / Write Flow (Fitbit Ingestion pipeline)
 
@@ -32,7 +38,11 @@ cd <repo-dir>
 ```
 docker-compose up -d
 ```
-3) **Verify the DB is up and your hypertable exists(make sure .env exist before run)**
+
+3) **Important: Have to set .env file for root folder and backend/frontend folder**
+Check the .env.example for example .env file 
+
+4) **Verify the DB is up and your hypertable exists(make sure .env exist before run)**
 ```
 docker-compose ps
 docker-compose exec timescaledb \
@@ -48,18 +58,13 @@ this should output
 (1 row)
 ```
 
-4) **To activate the front end**
-You need to set this in .env of frontend folder first
-```
-VITE_API_URL=http://localhost:5001
-```
-
-after install neccesary files and run it
+5) **To activate the front end**
+Install neccesary files and run it
 ```
 npm install 
 npm run dev
 ```
-5) **Clean up command**
+6) **Clean up command**
 ```
 docker-compose down -v
 ```
@@ -134,7 +139,8 @@ SnyderlabChal/
 2. Captures current time in local timezone  
 3. Fetches synthetic or real Fitbit data  
 4. Bulk-inserts into `raw_data` (with `ON CONFLICT` deduplication)  
-5. Updates `last_run.txt` to the new timestamp
+5. Automatically creates daily aggregates for efficient querying
+6. Updates `last_run.txt` to the new timestamp
 
   - **`last_run.txt`**  Stores the timestamp of the last successful run, enabling true incremental (delta) ingestion.
 
@@ -145,9 +151,10 @@ SnyderlabChal/
 1. Create the `fitbit_data` database  
 2. Enable the TimescaleDB extension  
 3. Define the `raw_data` table and convert it into a hypertable with a composite primary key for idempotency
+4. Create the `data_1d` daily aggregate table for memory-optimized queries
+5. Convert the aggregate table into a hypertable for TimescaleDB optimizations
 
 **`backend/`**
-
 - **`app.py`**
   - **API Endpoints**  
     - `GET /healthz`  
@@ -155,15 +162,22 @@ SnyderlabChal/
     - `GET /metrics`  
       Lists all available health metrics stored in the database.  
     - `GET /data`  
-      Retrieves paginated metric data with filter options (date range, metric type).  
+      Retrieves paginated metric data with filter options (date range, metric type).
+      Now features smart query routing based on timespan:
+      - ≤7 days: Returns detailed hourly data from raw_data
+      - 8-30 days: Returns daily aggregates with detailed statistics 
+      - >30 days: Returns simplified daily aggregates for maximum efficiency
     - `POST /generate-data`  
       Generates synthetic test data for a given date range as a fallback when the Fitbit API is unavailable.
+      Now automatically creates aggregates during data generation.
   - **Date Validation**  
     Enforces business rules:  
     - Maximum 60-day look-back per request  
     - All dates interpreted in America/Los_Angeles timezone
   - **Synthetic Data Generation**  
     Creates random metric records to support development and testing when live data is not accessible.
+  - **Memory Optimization**  
+    Implements smart data source selection to minimize memory usage for large queries.
 
 **`frontend/`**
 - **`components/`**
@@ -209,7 +223,7 @@ SnyderlabChal/
 
 - `docker-compose.yml`
 
-  Defines two services:
+  Defines three services:
 
 1. **`timescaledb`**  
   - Uses the official TimescaleDB image  
@@ -232,8 +246,32 @@ SnyderlabChal/
 
 
 ## Database Schema
+
+### Raw Data Table
 - `raw_data` table:
-  - Columns: `timestamp TIMESTAMPTZ`, `metric_type TEXT`, `value DOUBLE PRECISION`
-  - Primary Key: `(timestamp, metric_type)`
-- Converted to a hypertable on `timestamp`
-- Unique index on `(timestamp, metric_type)` for idempotency
+  - Columns: 
+    - `timestamp TIMESTAMPTZ NOT NULL`
+    - `user_id TEXT NOT NULL`
+    - `metric_type TEXT NOT NULL`
+    - `value DOUBLE PRECISION`
+  - Primary Key: `(timestamp, user_id, metric_type)`
+  - Converted to a hypertable on `timestamp`
+  - Unique index on `(timestamp, metric_type)` for idempotency
+
+### Aggregation Table
+- `data_1d` table (daily aggregates):
+  - Columns:
+    - `date_day DATE NOT NULL`
+    - `user_id TEXT NOT NULL`
+    - `metric_type TEXT NOT NULL`
+    - `avg_value DOUBLE PRECISION`
+    - `min_value DOUBLE PRECISION`
+    - `max_value DOUBLE PRECISION`
+    - `count_points INTEGER`
+  - Primary Key: `(date_day, user_id, metric_type)`
+  - Converted to a hypertable on `date_day`
+  - Automatically populated during data ingestion
+  - Used for memory-efficient queries on larger date ranges
+
+##
+**Note:** The system now automatically handles data aggregation. When querying data spanning more than 7 days, the system will automatically use optimized aggregate tables instead of raw data, providing significant performance improvements for large date ranges. No additional configuration is required - the optimization happens transparently to users.
