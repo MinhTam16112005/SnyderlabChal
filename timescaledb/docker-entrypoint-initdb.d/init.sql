@@ -13,9 +13,12 @@ CREATE TABLE IF NOT EXISTS raw_data (
 -- Convert to hypertable if not exists
 SELECT create_hypertable('raw_data', 'timestamp', if_not_exists => TRUE);
 
--- Add unique index if not exists
-CREATE UNIQUE INDEX IF NOT EXISTS raw_data_unique_idx 
-ON raw_data (timestamp, metric_type);
+-- DROP the bad index (if it already exists)
+DROP INDEX IF EXISTS raw_data_unique_idx;
+
+-- If you really want a secondary unique index, include user_id:
+CREATE UNIQUE INDEX IF NOT EXISTS raw_data_unique_idx
+  ON raw_data (timestamp, user_id, metric_type);
 
 -- Add daily aggregate table
 CREATE TABLE IF NOT EXISTS data_1d (

@@ -235,6 +235,47 @@ def get_metrics():
         print(f"Error getting metrics from DB: {e}")
         return METRICS
 
+@app.get("/users")
+def get_users():
+    """Get all users who have data in the system with statistics"""
+    try:
+        conn = db_config.get_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # Get user statistics
+        cur.execute("""
+        SELECT 
+            user_id,
+            COUNT(*) as total_records,
+            MIN(timestamp) as first_record,
+            MAX(timestamp) as last_record,
+            COUNT(DISTINCT metric_type) as metrics_count,
+            COUNT(DISTINCT DATE(timestamp)) as days_with_data
+        FROM raw_data 
+        GROUP BY user_id 
+        ORDER BY user_id
+        """)
+        
+        users_data = []
+        for row in cur.fetchall():
+            users_data.append({
+                "user_id": row["user_id"],
+                "total_records": row["total_records"],
+                "first_record": row["first_record"].isoformat() if row["first_record"] else None,
+                "last_record": row["last_record"].isoformat() if row["last_record"] else None,
+                "metrics_count": row["metrics_count"],
+                "days_with_data": row["days_with_data"]
+            })
+        
+        cur.close()
+        conn.close()
+        
+        return {"users": users_data}
+        
+    except Exception as e:
+        print(f"Error getting users from DB: {e}")
+        return {"users": [{"user_id": DEFAULT_USER_ID, "total_records": 0}]}
+
 # Main data access endpoint for frontend visualization and analysis
 @app.get("/data")
 def get_data(

@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useMetrics } from '../hooks/useMetrics'
 import { useHealthData } from '../hooks/useHealthData'
 import Alert from './Alert'
 
-const DataFetchForm = ({ onDataFetched }) => {
+const DataFetchForm = ({ selectedUser, timezone, onDataFetched }) => {  // ✅ Add props
   const [formData, setFormData] = useState({
     startDate: "",
     endDate: "",
@@ -13,6 +13,13 @@ const DataFetchForm = ({ onDataFetched }) => {
   
   const { metrics } = useMetrics()
   const { loading, error, fetchData } = useHealthData()
+
+  // ✅ Auto-populate userId when selectedUser changes
+  useEffect(() => {
+    if (selectedUser?.user_id) {
+      setFormData(prev => ({ ...prev, userId: selectedUser.user_id }))
+    }
+  }, [selectedUser])
 
   const handleInputChange = (field) => (e) => {
     setFormData(prev => ({ ...prev, [field]: e.target.value }))
@@ -30,7 +37,9 @@ const DataFetchForm = ({ onDataFetched }) => {
     <div className="controls-card">
       <div className="card-header">
         <h2 className="card-title">Data Controls</h2>
-        <p className="card-description">Select your parameters to fetch and visualize your fitness data</p>
+        <p className="card-description">
+          Select your parameters to fetch and visualize fitness data for <strong>{selectedUser?.user_id}</strong>
+        </p>
       </div>
 
       <form onSubmit={handleSubmit} className="controls-grid">
@@ -68,7 +77,12 @@ const DataFetchForm = ({ onDataFetched }) => {
             onChange={handleInputChange('userId')}
             className="input-field"
             required
+            readOnly  // ✅ Make read-only since it auto-populates
+            style={{ backgroundColor: '#f8f9fa', cursor: 'not-allowed' }}
           />
+          <small style={{ color: '#666', fontSize: '12px' }}>
+            Auto-populated from selected user
+          </small>
         </div>
 
         <div className="input-group">

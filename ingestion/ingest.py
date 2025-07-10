@@ -22,7 +22,7 @@ except Exception as e:
     SEED = 42
 
 try:
-    USER_ID = os.getenv("FITBIT_USER_ID", "user_1")
+    USER_ID = os.getenv("USER_ID", "user_1")
     print(f"[INIT] USER_ID: {USER_ID}")
 except Exception as e:
     print(f"[INIT] ERROR loading USER_ID: {e}")
@@ -201,6 +201,8 @@ def synthetic_data(start: datetime.datetime, end: datetime.datetime, metric: str
         if user_id is None:
             user_id = USER_ID
             log(f"Using default user_id: {user_id}")
+        else:
+            log(f"Using provided user_id: {user_id}")
         if start.tzinfo != LA_TIMEZONE:
             start = start.astimezone(LA_TIMEZONE)
             log(f"Converted start to LA timezone: {start}")
@@ -227,9 +229,9 @@ def synthetic_data(start: datetime.datetime, end: datetime.datetime, metric: str
         raise
 
 # Fetch data: synthetic or real Fitbit API.
-def fetch_fitbit_data(start_time: datetime.datetime, end_time: datetime.datetime):
+def fetch_fitbit_data(start_time: datetime.datetime, end_time: datetime.datetime, user_id: str = None):
     try:
-        log(f"fetch_fitbit_data() called with start={start_time}, end={end_time}")
+        log(f"fetch_fitbit_data() called with start={start_time}, end={end_time}, user_id={user_id}")
         log(f"SYNTHETIC mode: {SYNTHETIC}")
         rows = []
         if SYNTHETIC:
@@ -239,7 +241,7 @@ def fetch_fitbit_data(start_time: datetime.datetime, end_time: datetime.datetime
                 try:
                     log(f"[DRYRUN] Processing metric {i+1}/{len(METRICS)}: {metric}")
                     random.seed(SEED + i)
-                    part = synthetic_data(start_time, end_time, metric, SEED + i)
+                    part = synthetic_data(start_time, end_time, metric, SEED + i, user_id)
                     log(f"[DRYRUN] Generated {len(part)} points for {metric}")
                     rows.extend(part)
                     log(f"[DRYRUN] Total rows so far: {len(rows)}")
@@ -269,7 +271,7 @@ def fetch_fitbit_data(start_time: datetime.datetime, end_time: datetime.datetime
                             intraday = entry.get("activities-heart-intraday", {}).get("dataset", [])
                             for pt in intraday:
                                 ts = f"{day_str}T{pt['time']}"
-                                rows.append((ts, USER_ID, metric, pt['value']))
+                                rows.append((ts, user_id, metric, pt['value']))
                         log(f"[FETCH] Processed {metric}, total rows: {len(rows)}")
                     except Exception as e:
                         log(f"[FETCH] ERROR processing {metric}: {e}")
@@ -379,7 +381,7 @@ def ingest_for_range(start_dt: datetime.datetime, end_dt: datetime.datetime, use
     error_msg = validate_date_constraints(start_dt, end_dt)
     if error_msg: raise ValueError(error_msg)
     log(f"[RANGE_INGEST] Starting ingestion for range: {start_dt.isoformat()} → {end_dt.isoformat()}")
-    data = fetch_fitbit_data(start_dt, end_dt)
+    data = fetch_fitbit_data(start_dt, end_dt, user_id)
     log(f"[RANGE_INGEST] Fetched {len(data)} data points")
     saved_count = save_data(data)
     log(f"[RANGE_INGEST] Saved {saved_count} new records")
@@ -401,7 +403,7 @@ def main():
         now = get_current_la_time()
         last_run = get_last_timestamp()
         log(f"[MAIN_INGEST] Running automatic ingestion: {last_run.isoformat()} → {now.isoformat()}")
-        data = fetch_fitbit_data(last_run, now)
+        data = fetch_fitbit_data(last_run, now, USER_ID)
         log(f"[MAIN_INGEST] Fetched {len(data)} data points")
         saved_count = save_data(data)
         log(f"[MAIN_INGEST] Saved {saved_count} new records")
