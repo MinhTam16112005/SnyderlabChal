@@ -1,3 +1,6 @@
+// This file use only for display log on ingestion page (to see how many data points we ingested)
+// Additional file only use when needed
+
 const LogsDisplay = ({ logs }) => {
     if (!logs || logs.length === 0) return null
   

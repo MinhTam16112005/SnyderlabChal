@@ -1,74 +1,141 @@
-import { MAX_DATE_RANGE_DAYS, LA_TIMEZONE_OFFSET_HOURS, BUFFER_HOURS } from './constants'
+import { MAX_DATE_RANGE_DAYS, BUFFER_HOURS } from './constants.js'
 
-// Get maximum allowed end date (current time - 2 hours) in LA timezone
-export const getMaxEndDate = () => {
-  const now = new Date()
-  const laOffset = LA_TIMEZONE_OFFSET_HOURS * 60 // Convert to minutes
-  const laTime = new Date(now.getTime() - laOffset * 60 * 1000)
-  const maxDate = new Date(laTime.getTime() - BUFFER_HOURS * 60 * 60 * 1000)
-  return maxDate.toISOString().slice(0, 16)
-}
-
-// Get minimum allowed start date based on end date (60 days before end) - ✅ This should limit start date
-export const getMinStartDate = (endDate) => {
-  if (!endDate) return ""
-  const end = new Date(endDate)
-  const minStart = new Date(end.getTime() - MAX_DATE_RANGE_DAYS * 24 * 60 * 60 * 1000)
-  return minStart.toISOString().slice(0, 16)
-}
-
-// Get maximum allowed start date - ✅ Start date can be any time in the past, no restriction needed
-export const getMaxStartDate = () => {
-  return "" // No max restriction on start date
-}
-
-// Get minimum allowed end date based on start date (1 minute after start)
-export const getMinEndDate = (startDate) => {
-  if (!startDate) return ""
-  const start = new Date(startDate)
-  const minEnd = new Date(start.getTime() + 60 * 1000)
-  return minEnd.toISOString().slice(0, 16)
-}
-
-// Get max allowed end date based on start date (60 days after start, but not exceeding max allowed)
-export const getMaxEndDateFromStart = (startDate) => {
-  if (!startDate) return getMaxEndDate()
-  const start = new Date(startDate)
-  const maxFromStart = new Date(start.getTime() + MAX_DATE_RANGE_DAYS * 24 * 60 * 60 * 1000)
-  const absoluteMax = new Date(getMaxEndDate())
-  return maxFromStart < absoluteMax 
-    ? maxFromStart.toISOString().slice(0, 16) 
-    : absoluteMax.toISOString().slice(0, 16)
-}
-
-// Validate date range according to business rules
-export const validateDateRange = (start, end) => {
-  if (!start || !end) return null
-  
-  const startDate = new Date(start)
-  const endDate = new Date(end)
-  const now = new Date()
-  
-  // LA timezone adjustment
-  const laOffset = LA_TIMEZONE_OFFSET_HOURS * 60
-  const laTime = new Date(now.getTime() - laOffset * 60 * 1000)
-  const maxEndTime = new Date(laTime.getTime() - BUFFER_HOURS * 60 * 60 * 1000)
-  
-  // ✅ Only validate END date against current time restriction
-  if (endDate > maxEndTime) {
-    return "End date cannot be later than 2 hours ago (LA time)"
+// Get current time in specified timezone
+export const getCurrentTimeInTimezone = (timezone = 'America/Los_Angeles') => {
+  try {
+    return new Date().toLocaleString("en-US", {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
+  } catch (error) {
+    console.warn(`Could not get current time for timezone ${timezone}`);
+    return new Date().toISOString();
   }
-  
-  if (startDate >= endDate) {
-    return "Start date must be before end date"
+}
+
+// Get maximum allowed end date for datetime-local input format
+export const getMaxEndDate = (timezone = 'America/Los_Angeles') => {
+  try {
+    const now = new Date();
+    return now.toISOString().slice(0, 16) // Format for datetime-local input
+  } catch (error) {
+    return new Date().toISOString().slice(0, 16);
   }
+}
+
+// Calculate minimum start date based on maximum range from end date
+export const getMinStartDate = (endDate, timezone = 'America/Los_Angeles') => {
+  if (!endDate) return null;
   
-  const diffMs = endDate - startDate
-  const diffDays = diffMs / (1000 * 60 * 60 * 24)
-  
-  if (diffDays > MAX_DATE_RANGE_DAYS) {
-    return `Date range cannot exceed 2 months (${MAX_DATE_RANGE_DAYS} days)`
+  try {
+    const end = new Date(endDate);
+    const minStart = new Date(end.getTime() - (MAX_DATE_RANGE_DAYS * 24 * 60 * 60 * 1000));
+    return minStart.toISOString().slice(0, 16);
+  } catch (error) {
+    return null;
   }
+}
+
+// Get minimum allowed end date with buffer time after start date
+export const getMinEndDate = (startDate, timezone = 'America/Los_Angeles') => {
+  if (!startDate) return null;
   
-  return null
+  try {
+    const start = new Date(startDate);
+    const minEnd = new Date(start.getTime() + (BUFFER_HOURS * 60 * 60 * 1000));
+    return minEnd.toISOString().slice(0, 16);
+  } catch (error) {
+    return null;
+  }
+}
+
+// Calculate maximum end date considering range limit and current time
+export const getMaxEndDateFromStart = (startDate, timezone = 'America/Los_Angeles') => {
+  if (!startDate) return getMaxEndDate(timezone);
+  
+  try {
+    const start = new Date(startDate);
+    const maxFromStart = new Date(start.getTime() + (MAX_DATE_RANGE_DAYS * 24 * 60 * 60 * 1000));
+    const currentTime = new Date();
+    
+    // Return the earlier of the two: max range from start OR current time
+    const maxAllowed = maxFromStart <= currentTime ? maxFromStart : currentTime;
+    return maxAllowed.toISOString().slice(0, 16);
+  } catch (error) {
+    return getMaxEndDate(timezone);
+  }
+}
+
+// Validate date range with comprehensive constraint checking
+export const validateDateRange = (startDate, endDate, timezone = 'America/Los_Angeles') => {
+  if (!startDate || !endDate) {
+    return null;
+  }
+
+  try {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    // Check if dates are valid
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return "Invalid date format";
+    }
+    
+    // Check if end is after start
+    if (end <= start) {
+      return "End date must be after start date";
+    }
+    
+    // Check maximum range constraint
+    const diffTime = Math.abs(end - start);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays > MAX_DATE_RANGE_DAYS) {
+      return `Date range cannot exceed 2 months (${MAX_DATE_RANGE_DAYS} days)`;
+    }
+    
+    // Check if end date is in the future
+    const now = new Date();
+    if (end > now) {
+      return "End date cannot be in the future";
+    }
+    
+    return null; // No validation errors
+  } catch (error) {
+    return "Invalid date format";
+  }
+}
+
+// Check if a date is in the future relative to current time
+export const isFutureDate = (date, timezone = 'America/Los_Angeles') => {
+  try {
+    const inputDate = new Date(date);
+    const now = new Date();
+    return inputDate > now;
+  } catch (error) {
+    return false;
+  }
+}
+
+// Format date for user display in specified timezone
+export const formatDateInTimezone = (date, timezone = 'America/Los_Angeles') => {
+  try {
+    return new Date(date).toLocaleString("en-US", {
+      timeZone: timezone,
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  } catch (error) {
+    return new Date(date).toLocaleString();
+  }
 }
