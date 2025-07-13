@@ -1,64 +1,84 @@
-import { useState, useEffect } from "react"
-import { useUserContext } from "./hooks/useUserContext"
-import Header from "./components/Header"
-import DataGenerationForm from "./components/DataGenerationForm"
-import DataFetchForm from "./components/DataFetchForm"
-import DataVisualization from "./components/DataVisualization"
-import StatsGrid from "./components/StatsGrid"
-import "./App.css"
+import React, { useState } from 'react'
+import { UserProvider } from './contexts/UserContext'
+import EnrollmentPage from './components/EnrollmentPage'
+import IngestionPage from './components/IngestionPage'
+import AnalysisPage from './components/AnalysisPage'
+import TimezoneSelector from './components/TimezoneSelector'
+import logoImage from './assets/logo.png'
+import './App.css'
 
 function App() {
-  const [dataPoints, setDataPoints] = useState([])
-  const [currentMetric, setCurrentMetric] = useState("")
-  
-  // User context for global user state
-  const { selectedUser, timezone } = useUserContext()
+  const [currentPage, setCurrentPage] = useState('enrollment')
 
-  // Debug logging
-  useEffect(() => {
-    console.log('🎯 App - selectedUser changed:', selectedUser)
-    console.log('🎯 App - timezone:', timezone)
-  }, [selectedUser, timezone])
+  const pages = [
+    { id: 'enrollment', label: 'User Enrollment', description: 'Enroll users with start dates', icon: '👥' },
+    { id: 'ingestion', label: 'Data Ingestion', description: 'Generate synthetic data', icon: '📊' },
+    { id: 'analysis', label: 'Data Analysis', description: 'View charts and analytics', icon: '📈' }
+  ]
 
-  const handleDataFetched = (metric, data) => {
-    setCurrentMetric(metric)
-    setDataPoints(data)
+  const renderCurrentPage = () => {
+    switch (currentPage) {
+      case 'enrollment':
+        return <EnrollmentPage />
+      case 'ingestion':
+        return <IngestionPage />
+      case 'analysis':
+        return <AnalysisPage />
+      default:
+        return <EnrollmentPage />
+    }
   }
 
-  console.log('🎯 App render - selectedUser:', selectedUser ? selectedUser.user_id : 'null')
+  const handleLogoClick = () => {
+    window.location.reload()
+  }
 
   return (
-    <div className="app-container">
-      <div className="dashboard">
-        <Header />
-        
-        {!selectedUser && (
-          <div className="no-user-selected">
-            <p>👆 Please select a user to get started</p>
+    <UserProvider>
+      <div className="app-container">
+        <div className="dashboard">
+          {/* Header Section */}
+          <header className="header">
+            <div className="header-content">
+              <div className="header-main">
+                {/* Left side - Logo, Title, and Timezone */}
+                <div className="header-left">
+                  <img 
+                    src={logoImage}
+                    alt="Metric Momentum Logo"
+                    onClick={handleLogoClick}
+                    className="logo"
+                  />
+                  <h1 className="app-title">Metric Momentum</h1>
+                  <TimezoneSelector />
+                </div>
+
+                {/* Right side - Navigation Tabs */}
+                <div className="header-right">
+                  <nav className="top-navigation">
+                    {pages.map((page) => (
+                      <button
+                        key={page.id}
+                        className={`nav-tab ${currentPage === page.id ? 'active' : ''}`}
+                        onClick={() => setCurrentPage(page.id)}
+                      >
+                        {page.label}
+                      </button>
+                    ))}
+                  </nav>
+                </div>
+              </div>
+            </div>
+          </header>
+          
+          {/* Page Content */}
+          <div className="page-content">
+            {renderCurrentPage()}
           </div>
-        )}
-        
-        {selectedUser && (
-          <div className="dashboard-content">
-            <h3>Dashboard for {selectedUser.user_id}</h3>
-            <DataGenerationForm selectedUser={selectedUser} />
-            <DataFetchForm 
-              selectedUser={selectedUser} 
-              timezone={timezone}
-              onDataFetched={handleDataFetched} 
-            />
-            <DataVisualization 
-              dataPoints={dataPoints} 
-              metric={currentMetric}
-              timezone={timezone}
-            />
-            <StatsGrid dataPoints={dataPoints} />
-          </div>
-        )}
+        </div>
       </div>
-    </div>
+    </UserProvider>
   )
 }
 
-// Add this line at the end:
 export default App

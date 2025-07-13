@@ -2,6 +2,7 @@
 export const API_BASE_URL = 'http://localhost:5001'
 export const API_URL = 'http://localhost:5001'
 export const DEFAULT_USER_ID = 'user_1' 
+
 // Chart Colors
 export const CHART_COLORS = {
   primary: '#3b82f6',
@@ -12,32 +13,42 @@ export const CHART_COLORS = {
   info: '#06b6d4'
 }
 
-// Date Limits
-export const DATE_LIMITS = {
-  MIN_DATE: '2020-01-01',
-  MAX_DATE: '2030-12-31',
-  DEFAULT_RANGE_DAYS: 7
+// Date Configuration
+export const MAX_DATE_RANGE_DAYS = 60
+export const BUFFER_HOURS = 0
+
+// Timezone Configuration
+export const DEFAULT_TIMEZONE = 'America/Los_Angeles'
+
+export const TIMEZONE_CONFIG = {
+  'America/Los_Angeles': {
+    label: 'Pacific Time (PT)',
+    standardOffset: -8, // PST
+    daylightOffset: -7  // PDT
+  },
+  'America/New_York': {
+    label: 'Eastern Time (ET)',
+    standardOffset: -5, // EST
+    daylightOffset: -4  // EDT
+  },
+  'America/Chicago': {
+    label: 'Central Time (CT)',
+    standardOffset: -6, // CST
+    daylightOffset: -5  // CDT
+  },
+  'America/Denver': {
+    label: 'Mountain Time (MT)',
+    standardOffset: -7, // MST
+    daylightOffset: -6  // MDT
+  },
+  'UTC': {
+    label: 'Coordinated Universal Time (UTC)',
+    standardOffset: 0,
+    daylightOffset: 0
+  }
 }
-export const MAX_DATE_RANGE_DAYS = 30
 
-// Date Validation
-export const BUFFER_HOURS = 2
-export const LA_TIMEZONE_OFFSET_HOURS = -8
-
-// Pagination
-export const DEFAULT_PAGE_SIZE = 1000
-
-// Health Metrics
-export const HEALTH_METRICS = [
-  'intraday_heart_rate',
-  'intraday_steps',
-  'sleep_efficiency',
-  'sleep_duration',
-  'active_zone_minutes',
-  'resting_heart_rate'
-]
-
-// Timezones
+// Available timezones for dropdown
 export const TIMEZONES = [
   'America/Los_Angeles',
   'America/New_York', 
@@ -45,3 +56,6 @@ export const TIMEZONES = [
   'America/Denver',
   'UTC'
 ]
+
+// Pagination
+export const DEFAULT_PAGE_SIZE = 1000

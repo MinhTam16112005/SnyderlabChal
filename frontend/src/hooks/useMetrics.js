@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react'
 import { API_URL } from '../utils/constants'
 
 export const useMetrics = () => {
+  // State management for metrics data
   const [metrics, setMetrics] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // Fetch metrics data on component mount
   useEffect(() => {
     const fetchMetrics = async () => {
       try {

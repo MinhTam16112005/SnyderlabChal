@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react'
 import { API_BASE_URL } from '../utils/constants'
 
 export const useUsers = () => {
+  // State management for users data
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // Fetch all users from the API
   const fetchUsers = async () => {
     try {
       setLoading(true)
@@ -27,6 +29,7 @@ export const useUsers = () => {
     }
   }
 
+  // Fetch users on component mount
   useEffect(() => {
     fetchUsers()
   }, [])

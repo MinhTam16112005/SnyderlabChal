@@ -5,10 +5,14 @@ import LogsDisplay from './LogsDisplay'
 import Alert from './Alert'
 
 const DataGenerationForm = () => {
+  // Form state for date range selection
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
+  
+  // Hook for data generation functionality
   const { loading, error, success, logs, generateData } = useDataGeneration()
 
+  // Handle form submission and reset fields on success
   const handleSubmit = async (e) => {
     e.preventDefault()
     const result = await generateData({ startDate, endDate })
@@ -18,10 +22,12 @@ const DataGenerationForm = () => {
     }
   }
 
+  // Form validation - check if both dates are provided and valid
   const isFormValid = startDate && endDate && !validateDateRange(startDate, endDate)
 
   return (
     <div className="controls-card">
+      {/* Header section with title and description */}
       <div className="card-header">
         <h2 className="card-title">Generate Test Data</h2>
         <p className="card-description">
@@ -30,6 +36,7 @@ const DataGenerationForm = () => {
       </div>
 
       <form onSubmit={handleSubmit} className="controls-grid">
+        {/* Start date input with dynamic validation */}
         <div className="input-group">
           <label htmlFor="gen-start-date" className="input-label">Start Date</label>
           <input
@@ -37,13 +44,13 @@ const DataGenerationForm = () => {
             type="datetime-local"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
-            min={endDate ? getMinStartDate(endDate) : ""} // ✅ Start date can be 60 days before end date
-            // ✅ Removed max restriction on start date
+            min={endDate ? getMinStartDate(endDate) : ""}
             className="input-field"
             required
           />
         </div>
 
+        {/* End date input with dynamic min/max constraints */}
         <div className="input-group">
           <label htmlFor="gen-end-date" className="input-label">End Date</label>
           <input
@@ -51,13 +58,14 @@ const DataGenerationForm = () => {
             type="datetime-local"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
-            min={startDate ? getMinEndDate(startDate) : ""} // ✅ End date must be after start date
-            max={startDate ? getMaxEndDateFromStart(startDate) : getMaxEndDate()} // ✅ End date limited by current time - 2 hours OR 60 days from start
+            min={startDate ? getMinEndDate(startDate) : ""}
+            max={startDate ? getMaxEndDateFromStart(startDate) : getMaxEndDate()}
             className="input-field"
             required
           />
         </div>
 
+        {/* Submit button with loading state */}
         <div className="button-group">
           <button
             type="submit"
@@ -76,6 +84,7 @@ const DataGenerationForm = () => {
         </div>
       </form>
 
+      {/* Status messages and logs display */}
       <Alert type="error" message={error} />
       <Alert type="success" message={success} />
       <LogsDisplay logs={logs} />

@@ -74,7 +74,7 @@ try:
     METRICS = [
         "intraday_heart_rate",
         "intraday_breath_rate",
-        "intraday_active_zone_minute",
+        "intraday_active_zone_minutes",
         "intraday_activity",
         "intraday_hrv",
         "intraday_spo2",
