@@ -30,6 +30,9 @@
   I structure database so you can create how many user you want and ingest how many data points you want too. (4)
   Please see the detailed aggregation technique explaination I applied into my program in the [Google Doc](https://docs.google.com/document/d/1OY2PlsC_XDZ060Dw5oSTyHAeoWPiIbVfOWu471qASZ4/edit?usp=sharing). (Tab: Task 4)
 
+- **Update 6 (July 14)**
+  Completed task 5: Monitoring / Alerting 
+  I've built a comprehensive enterprise-grade monitoring and alerting system using Prometheus, Grafana, and AlertManager with Docker Compose. The system provides complete observability across infrastructure, application metrics, and business logic with intelligent email alerting.
 ## Getting started
 
 1. **Clone and configure env**  
@@ -61,10 +64,67 @@ Install neccesary files and run it
 npm install 
 npm run dev
 ```
-6) **Clean up command**
+
+6) **To access the monitoring stack**
+Prometheus (metrics & alerts)
+```
+open http://localhost:9090
+```
+
+Grafana (dashboards) - admin/admin123
+
+```
+open http://localhost:3001
+```
+
+AlertManager (alert status)
+```
+open http://localhost:9093
+```
+
+To verify monitoring services:
+```
+docker-compose ps prometheus grafana alertmanager mailhog node-exporter cadvisor
+```
+
+7) **Clean up command**
 ```
 docker-compose down -v
 ```
+
+### **Troubleshooting**
+Common Issues
+- Services won't start
+```
+# Check all services status
+docker-compose ps
+
+# Check specific service logs
+docker-compose logs [service-name]
+
+# Restart specific service
+docker-compose restart [service-name]
+```
+
+- Database connection issues
+```
+# Verify TimescaleDB is running
+docker-compose exec timescaledb pg_isready -U fitbit_user
+
+# Check database tables
+docker-compose exec timescaledb psql -U fitbit_user -d fitbit_data -c "\dt"
+```
+
+Frontend not loading
+```
+# Ensure frontend dependencies are installed
+cd frontend && npm install
+
+# Start development server
+npm run dev
+```
+
+
 ## File Structure
 ```
 SnyderlabChal/
@@ -143,11 +203,66 @@ SnyderlabChal/
 │   └── docker-entrypoint-initdb.d/
 │       └── init.sql                # Database and table initialization
 │
+├── monitoring/                     # Enterprise monitoring and alerting stack
+│   ├── alertmanager/              # AlertManager configuration
+│   │   └── alertmanager.yml       # Email notifications and alert routing rules
+│   │
+│   ├── grafana/                   # Grafana dashboards and data sources
+│   │   └── provisioning/          # Auto-provisioning configuration
+│   │       ├── dashboards/        # Dashboard definitions
+│   │       │   ├── dashboards.yml # Dashboard provider configuration
+│   │       │   └── snyderlab-dashboard.json # Custom SnyderLab application dashboard
+│   │       └── datasources/       # Data source definitions
+│   │           └── datasources.yml # Prometheus data source configuration
+│   │
+│   └── prometheus/                # Prometheus metrics collection
+│       ├── prometheus.yml         # Scrape targets and global configuration
+│       └── rules.yml              # Alert rules for monitoring conditions
+│
 ├── docker-compose.yml              # Multi-service orchestration
 ├── .env.example                    # Environment variables template
 ├── .gitignore                      # Git exclusion rules
 ├── LICENSE                         # MIT license
 └── README.md                       # Project documentation
+```
+
+## Environment Variables Configuration
+
+### Required Environment Variables
+
+Create `.env` files in three locations:
+1. **Root directory** (for Docker Compose)
+2. **`backend/` folder** (for API service)  
+3. **`frontend/` folder** (for React app)
+
+#### Root `.env` (Database Configuration)
+```dotenv
+# Database Settings
+DB_HOST=timescaledb
+DB_PORT=5432
+DB_NAME=fitbit_data
+DB_USER=fitbit_user
+DB_PASSWORD=fitbit_password
+
+# Data Generation
+SEED=100
+```
+
+#### Backend `.env` (Backend Configuration)
+```
+DB_HOST=timescaledb
+DB_PORT=5432
+DB_NAME=fitbit_data
+DB_USER=fitbit_user
+DB_PASSWORD=fitbit_password
+API_PORT=5001
+USER_ID=user_1
+SEED=100
+```
+
+#### Frontend `.env` (Frontend Configuration)
+```
+VITE_API_BASE_URL=http://localhost:5001
 ```
 
 ## Detail Explaination
@@ -183,6 +298,9 @@ SnyderlabChal/
       Performs a system health check, including database connectivity and import status.  
     - `GET /metrics`  
       Lists all available health metrics stored in the database.
+    - `GET /prom-metrics`  
+      Prometheus metrics endpoint exposing application metrics for monitoring stack integration.
+      Provides real-time metrics including API request counters, response times, and business logic indicators.
     - `GET /users`  
       Retrieves all users with their data statistics (total records, date ranges, metrics count).
     - `GET /enrolled-users`  
@@ -201,6 +319,18 @@ SnyderlabChal/
       Enrolls new users in the system with proper timezone handling and duplicate prevention.
     - `DELETE /users/{user_id}`  
       Removes users and all associated data with cascading deletion.
+
+  - **Prometheus Monitoring Integration**  
+    **Custom Application Metrics**:
+    - `api_requests_total`: Counter tracking HTTP requests by method, endpoint, and status code
+    - `api_request_duration_seconds`: Histogram measuring API response times for performance monitoring
+    - `data_points_processed_total`: Counter tracking total data points ingested across all users
+    - `database_connections_active`: Gauge monitoring active database connection pool usage
+    - `imputation_operations_total`: Counter tracking imputation operations by type (linear, pattern_based, linear_fallback)
+    
+    **Automatic Request Tracking**: Middleware automatically instruments all API endpoints with request counting, duration measurement, and status code tracking for comprehensive observability.
+    
+    **Business Logic Monitoring**: Tracks data processing rates, imputation algorithm usage, and database performance metrics for operational insights.
       
   - **Data Imputation System**  
     **Tiered Imputation Strategy**:
@@ -212,20 +342,35 @@ SnyderlabChal/
     
     **Pattern Matching**: Uses weighted historical analysis with configurable lookback periods and time-based pattern recognition
     
+    **Database Integration**: Saves imputed points with metadata tracking (method used, gap duration, imputation timestamp) for quality assurance and audit trails.
+    
+  - **Advanced Gap Detection Service**
+    **Automated Gap Identification**: Analyzes time series data to detect missing periods based on expected 1-hour intervals with 50% tolerance.
+    
+    **Gap Categorization**: Classifies gaps into three tiers:
+    - Short gaps (≤2 hours): Suitable for linear interpolation
+    - Medium gaps (3-10 hours): Candidates for pattern-based imputation
+    - Long gaps (11+ hours): Marked for manual review, no automatic imputation
+    
+    **Historical Pattern Analysis**: Retrieves data from same time periods (1, 2, 7, 14 days ago) with weighted averaging for intelligent prediction.
+    
   - **User Management**  
     Complete user lifecycle with enrollment tracking, data association, and secure deletion.
     Timezone-aware enrollment dates stored in UTC with proper conversion handling.
+    **Enrollment Table Integration**: Maintains separate `users` table for enrollment tracking with timestamps and data association statistics.
     
   - **Database Integration**  
     Dynamic schema detection for imputation columns with graceful fallback.
     Conflict resolution using `ON CONFLICT` for data consistency.
     Support for both legacy and enhanced database schemas.
+    **Connection Pool Management**: Proper database connection lifecycle with automatic cleanup and error handling.
     
   - **Date Validation**  
     Enforces business rules:  
     - Maximum 60-day look-back per request  
     - All dates interpreted in America/Los_Angeles timezone
     - Future date prevention and proper timezone conversion
+    **Business Rule Validation**: Comprehensive date range validation with timezone-aware processing and constraint enforcement.
     
   - **Synthetic Data Generation**  
     Creates realistic test data with intentional gaps:
@@ -233,16 +378,170 @@ SnyderlabChal/
     - 30% medium gaps (4-8 hours) for testing pattern-based imputation  
     - 10% long gaps (12-24 hours) for testing no-imputation scenarios
     - Deterministic random seed for reproducible test datasets
+    **Configurable Gap Generation**: Programmable gap distribution for testing different imputation scenarios and algorithm validation.
     
   - **Error Handling and Logging**  
     Comprehensive exception handling with detailed error messages.
     Log capture system for debugging synthetic data generation.
     Proper HTTP status codes and structured error responses.
+    **Log Capture System**: Custom logging mechanism for API clients with structured error reporting and debugging support.
     
   - **CORS and Security**  
     Cross-origin resource sharing configured for frontend integration.
     Database connection management with proper resource cleanup.
+    **Middleware Architecture**: Automatic request instrumentation for monitoring with proper resource management and cleanup.
 
+  - **Production Monitoring Features**  
+    - **Health Check Integration**: Comprehensive system health validation including database connectivity, import module status, and current timestamp reporting.
+    
+    - **Metrics Export**: Native Prometheus metrics exposition format for seamless integration with monitoring stack.
+    
+    - **Performance Tracking**: Real-time monitoring of API performance, database operations, and business logic execution with alerting-ready metrics.
+
+**`monitoring/`**
+- **`alertmanager/`**
+  - **Purpose**: Intelligent email alerting and notification routing system
+    - `alertmanager.yml`: Email notification configuration with SMTP settings, alert routing rules, and professional email templates
+      - **Global SMTP Configuration**: Uses MailHog (mailhog:1025) for development email testing with TLS disabled
+      - **Alert Routing**: Groups alerts by alertname with 10-second wait times and 1-hour repeat intervals
+      - **Email Templates**: Professional notification format with alert details, severity levels, and monitoring links
+      - **Inhibition Rules**: Critical alerts suppress warning alerts for the same instance to reduce noise
+      - **Recipients**: Configured to send alerts to admin@wearipedia.com with proper From/Reply-To headers
+
+- **`grafana/`**
+  - **Purpose**: Data visualization and dashboard management system
+    - `provisioning/`: Auto-provisioning configuration for seamless deployment
+      - **`dashboards/`**: Dashboard definitions and provider configuration
+        - `dashboards.yml`: Dashboard provider configuration enabling auto-discovery of JSON dashboard files
+        - `snyderlab-dashboard.json`: Custom SnyderLab application dashboard with 4 key panels:
+          - **API Request Rate**: Real-time request rate visualization (requests/second)
+          - **API Response Time**: 95th percentile response time monitoring for performance tracking
+          - **Data Points Processed**: Total data ingestion counter across all users
+          - **Imputation Operations by Type**: Pie chart showing distribution of imputation methods (linear, pattern_based, linear_fallback)
+        - **Dashboard Features**: 1-hour time range, 30-second auto-refresh, browser timezone support
+      - **`datasources/`**: Data source definitions for metrics collection
+        - `datasources.yml`: Prometheus data source configuration (http://prometheus:9090) as default data source
+
+- **`prometheus/`**
+  - **Purpose**: Metrics collection and alert rule engine
+    - `prometheus.yml`: Comprehensive scrape configuration and global settings
+      - **Global Configuration**: 15-second scrape and evaluation intervals for real-time monitoring
+      - **Scrape Targets**: 
+        - `prometheus`: Self-monitoring on localhost:9090
+        - `node-exporter`: Host system metrics (CPU, memory, disk, network) on node-exporter:9100
+        - `cadvisor`: Container resource metrics on cadvisor:8080
+        - `backend-api`: Custom application metrics via /prom-metrics endpoint on backend:5000 (30-second interval)
+      - **AlertManager Integration**: Configured to send alerts to alertmanager:9093
+    - `rules.yml`: Production-ready alert rules for comprehensive system monitoring
+      - **Critical Alerts**:
+        - `InstanceDown`: Service unavailability detection (up == 0 for >1 minute)
+        - `HighAPIErrorRate`: API error spike detection (>0.1 errors/second for >2 minutes)
+      - **Warning Alerts**:
+        - `HighMemoryUsage`: Memory exhaustion warning (>80% usage for >2 minutes)
+        - `SlowAPIResponse`: Performance degradation (95th percentile >2 seconds for >3 minutes)
+        - `NoDataProcessing`: Data pipeline stall detection (no data points for >10 minutes)
+        - `HighImputationRate`: Data quality issues (>10 imputation ops/second for >2 minutes)
+      - **Alert Metadata**: Rich annotations with summaries, descriptions, and dynamic value templating
+
+**Enterprise Monitoring Features**:
+- **Complete Observability Stack**: Infrastructure + Application + Business Logic monitoring
+- **Intelligent Alerting**: 6 production-ready alert rules with appropriate severity levels and thresholds
+- **Professional Email Notifications**: Formatted alerts with monitoring links and detailed information
+- **Auto-Provisioning**: Zero-configuration Grafana setup with pre-built dashboards
+- **Real-Time Visualization**: Custom dashboard panels showing API performance, data processing, and system health
+- **Multi-Layer Metrics Collection**: Host metrics (Node Exporter), container metrics (cAdvisor), and custom application metrics
+- **Development-Ready**: MailHog integration for local email testing without external SMTP dependencies
+- **Production Considerations**: Clear documentation for transitioning from MailHog to production SMTP servers
+- **Alert Correlation**: Inhibition rules prevent alert fatigue by suppressing lower-priority alerts when critical issues occur
+- **Scalable Architecture**: Modular design allows components to be deployed across multiple hosts by updating scrape targets
+
+
+## **Mornitoring Dashboard Interpretation Guide**
+
+### Accessing Grafana Dashboards
+1. Open http://localhost:3001
+2. Login: `admin` / `admin123`
+3. Navigate to **SnyderLab Dashboard** (auto-loaded)
+
+### Dashboard Panels Explained
+
+#### **Panel 1: API Request Rate**
+- **Metric**: `rate(api_requests_total[5m])`
+- **Shows**: Real-time API requests per second
+- **Normal Range**: 0.1-5 requests/second during testing
+- **Alert Threshold**: >10 req/sec indicates unusual activity
+
+#### **Panel 2: API Response Time (95th Percentile)**  
+- **Metric**: `histogram_quantile(0.95, rate(api_request_duration_seconds_bucket[5m]))`
+- **Shows**: 95% of requests complete within this time
+- **Normal Range**: 50-500ms for healthy API
+- **Alert Threshold**: >2 seconds triggers SlowAPIResponse alert
+
+#### **Panel 3: Data Points Processed**
+- **Metric**: `increase(data_points_processed_total[1h])`
+- **Shows**: Total data points ingested in the last hour
+- **Normal Range**: 100-1000 points/hour during data generation
+- **Alert Threshold**: 0 points for >10 minutes triggers NoDataProcessing alert
+
+#### **Panel 4: Imputation Operations by Type**
+- **Metrics**: `imputation_operations_total` by method
+- **Shows**: Distribution of imputation algorithms used
+- **Types**: 
+  - `linear`: Simple interpolation (short gaps)
+  - `pattern_based`: Historical pattern matching (medium gaps)  
+  - `linear_fallback`: Fallback when pattern matching fails
+- **Alert Threshold**: >10 ops/second indicates data quality issues
+
+### Key Performance Indicators (KPIs)
+- **Green**: All metrics within normal ranges
+- **Yellow**: Warning thresholds exceeded (investigate)
+- **Red**: Critical thresholds exceeded (immediate action required)
+
+## Alert System Guide
+
+### Alert Severity Levels
+
+#### **🔴 Critical Alerts (Immediate Response)**
+- **InstanceDown**: Service completely unavailable
+  - **Action**: Check `docker-compose ps`, restart failed services
+- **HighAPIErrorRate**: >0.1 server errors per second  
+  - **Action**: Check backend logs: `docker-compose logs backend`
+
+#### **🟡 Warning Alerts (Investigation Required)**
+- **HighMemoryUsage**: >80% memory usage
+  - **Action**: Check system resources, consider scaling
+- **SlowAPIResponse**: 95th percentile >2 seconds
+  - **Action**: Check database performance, query optimization
+- **NoDataProcessing**: No data ingested for >10 minutes
+  - **Action**: Verify data generation, check ingestion service
+- **HighImputationRate**: >10 imputation operations per second
+  - **Action**: Investigate data source reliability
+
+Note: Email alert format is included in alertmanager.yml
+
+
+### Alert Testing
+```
+# Test email delivery
+curl -X POST http://localhost:5001/generate-data \
+  -H "Content-Type: application/json" \
+  -d '{"start_date": "2025-01-01", "end_date": "2025-01-02", "user_id": "test"}'
+
+# Check MailHog inbox
+open http://localhost:8025
+
+# Check Prometheus targets
+curl http://localhost:9090/api/v2/targets
+
+# Verify backend metrics endpoint
+curl http://localhost:5001/prom-metrics
+
+# Check AlertManager configuration
+docker-compose logs alertmanager | grep -i error
+
+# Check MailHog web interface
+open http://localhost:8025
+```
 **`frontend/`**
 - **`src/components/`**
   - **Purpose**: Reusable React UI components that render the user interface
@@ -335,7 +634,9 @@ UserContext → Custom Hooks → API Calls → Component State → UI Updates
 
 **`docker-compose.yml`**
 
-  Defines three services:
+  Defines nine services for complete enterprise-grade monitoring:
+
+**Core Application Services:**
 
 1. **`timescaledb`**  
   - Uses the official TimescaleDB image  
@@ -355,6 +656,64 @@ UserContext → Custom Hooks → API Calls → Component State → UI Updates
   - Connects to TimescaleDB for database operations
   - Supports both real ingestion module and synthetic data fallback
   - Depends on the `timescaledb` service
+  - Includes health check endpoint for monitoring integration
+
+**Enterprise Monitoring Stack:**
+
+4. **`prometheus`**
+  - Metrics collection and alert rule engine
+  - Exposes port **9090** for web interface and API
+  - Mounts `./monitoring/prometheus` for configuration files
+  - 200-hour data retention with lifecycle management enabled
+  - Scrapes metrics from all services every 15 seconds
+
+5. **`grafana`**
+  - Data visualization and dashboard management
+  - Exposes port **3001** (avoiding frontend conflict)
+  - Auto-provisioning from `./monitoring/grafana/provisioning`
+  - Default credentials: admin/admin123
+  - Pre-configured with Prometheus data source and custom dashboards
+
+6. **`alertmanager`**
+  - Intelligent alert routing and email notifications
+  - Exposes port **9093** for web interface
+  - Email notification configuration via `./monitoring/alertmanager`
+  - Professional alert templates with grouping and inhibition rules
+
+7. **`mailhog`**
+  - Development SMTP server for email testing
+  - Exposes port **1025** (SMTP) and **8025** (Web UI)
+  - Captures all emails locally for development and testing
+  - No external email dependencies required
+
+**Infrastructure Monitoring:**
+
+8. **`node-exporter`**
+  - Host system metrics collection (CPU, memory, disk, network)
+  - Exposes port **9100** for metrics endpoint
+  - Mounts host filesystem for comprehensive system monitoring
+  - Excludes virtual filesystems for accurate metrics
+
+9. **`cadvisor`**
+  - Container resource monitoring and Docker metrics
+  - Exposes port **8080** for web interface and metrics
+  - Privileged access for complete container visibility
+  - Real-time container performance and resource usage tracking
+
+**Network and Storage:**
+- **`snyder-net`**: Bridge network connecting all services for internal communication
+- **`prometheus-data`**: Persistent volume for Prometheus metrics storage
+- **`grafana-data`**: Persistent volume for Grafana dashboards and configurations
+- **`tsdb-data`**: TimescaleDB data persistence across container restarts
+
+**Key Features:**
+- **Complete Observability**: Application + Infrastructure + Container monitoring
+- **Auto-Discovery**: Prometheus automatically discovers and monitors all services
+- **Health Checks**: Built-in health monitoring with automatic restart policies
+- **Development-Ready**: MailHog eliminates external SMTP dependencies
+- **Production-Scalable**: Modular architecture supports distributed deployment
+- **Data Persistence**: All critical data survives container restarts
+- **Security**: Internal network isolation with controlled port exposure
 
 
 ## Database Schema

@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional
 from fastapi import FastAPI, HTTPException
@@ -11,6 +12,9 @@ import psycopg2
 from psycopg2.extras import RealDictCursor, execute_values
 import pytz
 import statistics
+
+from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+from fastapi.responses import Response
 
 # Load environment variables
 load_dotenv()
@@ -30,6 +34,13 @@ DEFAULT_USER_ID = "user_1"
 MAX_DATE_RANGE_DAYS = 60
 DEFAULT_PAGE_SIZE = 1000
 SYNTHETIC_DATA_SEED = 42
+
+# Prometheus Metrics
+api_requests_total = Counter('api_requests_total', 'Total API requests', ['method', 'endpoint', 'status'])
+api_request_duration = Histogram('api_request_duration_seconds', 'API request duration')
+data_points_processed = Counter('data_points_processed_total', 'Total data points processed')
+database_connections = Gauge('database_connections_active', 'Active database connections')
+imputation_operations = Counter('imputation_operations_total', 'Total imputation operations', ['type'])
 
 # Add ingestion module to Python path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -206,6 +217,7 @@ class ImputationService:
                 }
                 
                 imputed_points.append(imputed_point)
+                imputation_operations.labels(type='linear').inc()
                 current_time += timedelta(hours=1)
             
             return imputed_points
@@ -256,6 +268,10 @@ class ImputationService:
                 }
                 
                 imputed_points.append(imputed_point)
+                if imputation_method == 'pattern_based':
+                    imputation_operations.labels(type='pattern_based').inc()
+                else:
+                    imputation_operations.labels(type='linear_fallback').inc()
                 current_time += timedelta(hours=1)
             
             return imputed_points
@@ -527,6 +543,28 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Prometheus middleware for automatic request tracking
+@app.middleware("http")
+async def prometheus_middleware(request, call_next):
+    start_time = time.time()
+    
+    # Process the request
+    response = await call_next(request)
+    
+    # Calculate duration
+    duration = time.time() - start_time
+    
+    # Record metrics
+    method = request.method
+    endpoint = request.url.path
+    status = str(response.status_code)
+    
+    # Track request count and duration
+    api_requests_total.labels(method=method, endpoint=endpoint, status=status).inc()
+    api_request_duration.observe(duration)
+    
+    return response
 
 # Pydantic models
 class GenerateDataRequest(BaseModel):
@@ -821,6 +859,7 @@ async def generate_data(request: GenerateDataRequest):
         
         try:
             result = ingest_for_range(start_dt, end_dt, request.user_id)
+            data_points_processed.inc(result["total_points"])
         finally:
             sys.stdout = old_stdout
         
@@ -962,6 +1001,12 @@ async def delete_user(user_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# Prometheus metrics endpoint
+@app.get("/prom-metrics")
+def metrics():
+    """Expose Prometheus metrics"""
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 # Run development server
 if __name__ == "__main__":
