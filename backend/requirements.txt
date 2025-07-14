@@ -4,3 +4,4 @@ psycopg2-binary
 python-dotenv
 wearipedia
 pytz
+prometheus-client==0.20.0

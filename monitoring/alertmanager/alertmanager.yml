@@ -1,0 +1,59 @@
+global:
+  smtp_smarthost: 'mailhog:1025'
+  smtp_from: 'alerts@snyderlab.com'
+
+route:
+  group_by: ['alertname']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 1h
+  receiver: 'email-receiver'
+
+receivers:
+  - name: 'email-receiver'
+    email_configs:
+      - to: 'admin@wearipedia.com'
+        from: 'alerts@snyderlab.com'
+        smarthost: 'mailhog:1025'
+        require_tls: false
+        
+        # Override the Subject header (v0.28+ syntax)
+        headers:
+          Subject: 'SnyderLab Alert: {{ .GroupLabels.alertname }}'
+          Reply-To: 'noreply@snyderlab.com'
+        
+        # Plain-text email body (v0.28+ syntax) - FIXED TEMPLATE
+        text: |
+          SnyderLab Alert Notification
+          ================================================
+          
+          Alert Name: {{ .GroupLabels.alertname }}
+          Severity: {{ .CommonLabels.severity }}
+          
+          Alert Details:
+          {{ range .Alerts }}
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          Summary: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Started: {{ .StartsAt.Format "2006-01-02 15:04:05 UTC" }}
+          {{ if .EndsAt }}Ended: {{ .EndsAt.Format "2006-01-02 15:04:05 UTC" }}{{ end }}
+          
+          Instance: {{ .Labels.instance }}
+          Job: {{ .Labels.job }}
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          {{ end }}
+          
+          Monitoring Links:
+          • Prometheus: http://localhost:9090/alerts
+          • Grafana: http://localhost:3001
+          • AlertManager: http://localhost:9093
+          
+          This is an automated alert from SnyderLab Monitoring System.
+          Please investigate and resolve the issue promptly.
+
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'instance']
