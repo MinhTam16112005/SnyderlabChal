@@ -125,6 +125,7 @@ services:
   # MailHog - Fake SMTP server for testing email alerts
   mailhog:
     image: mailhog/mailhog:latest
+    platform: linux/amd64 # Fix system incompatibility
     container_name: mailhog
     ports:
       - "1025:1025"  # SMTP port

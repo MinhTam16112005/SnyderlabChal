@@ -1,5 +1,5 @@
 # Snyderlab Challenge
-
+# Note: Please use google chrome for running the frontend, other browser doesnt support minute and second time option
 ## Updates
 
 - **Update 1 (July 6)**  
@@ -33,6 +33,14 @@
 - **Update 6 (July 14)**
   Completed task 5: Monitoring / Alerting 
   I've built a comprehensive enterprise-grade monitoring and alerting system using Prometheus, Grafana, and AlertManager with Docker Compose. The system provides complete observability across infrastructure, application metrics, and business logic with intelligent email alerting.
+
+- **Final Update (July 14) 9PM**
+  Completed task 6: Horizontally Scaling
+  I've included all services and quantity of nodes along with their specs for final product, including data ingestion, query and dashboard, monitoring and alert, and store archive data.
+  Please see the detailed aggregation technique explaination I applied into my program in the [Google Doc](https://docs.google.com/document/d/1OY2PlsC_XDZ060Dw5oSTyHAeoWPiIbVfOWu471qASZ4/edit?usp=sharing). (Tab: Task 0.a)
+  Please read the "Please read" tab if you are able to, very much appreciated
+
+Note: To simulate real case scenario for production level, I have 2 branch : main and development-branch, I always commit code on to development-branch first, then use my friend computer to test it, after that do commit to main.
 ## Getting started
 
 1. **Clone and configure env**  
